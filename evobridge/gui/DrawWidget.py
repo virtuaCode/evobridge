@@ -96,7 +96,6 @@ class DrawWidget(QFrame):
         self.repaint()
 
     def keyPressEvent(self, event: QKeyEvent):
-        print("Keypress", event.key())
         if event.key() == Qt.Key_Delete:
             for o in self.selectedObjects:
                 self.state.removeObject(o)
