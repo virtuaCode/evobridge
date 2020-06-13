@@ -1,10 +1,12 @@
 from .AppWidget import AppWidget
-from PyQt5.QtWidgets import (QAction, QLabel, QMainWindow, QFileDialog)
+from PyQt5.QtWidgets import (
+    QAction, QLabel, QMainWindow, QFileDialog, QActionGroup)
 from PyQt5.QtGui import (QIcon)
 from PyQt5.QtCore import (Qt, pyqtSlot)
 
 from .State import State
 import os
+from ..lib.lsearch import LocalSearchOptimizer
 
 moduleDir = os.path.dirname(__file__)
 
@@ -34,9 +36,34 @@ class MainWindow(QMainWindow):
             "Create Rock", self)
         newRockAction.triggered.connect(self.app.drawing.addNewRock)
 
+        toggleWoodAction = QAction(QIcon(), "Wood", self)
+        toggleStreetAction = QAction(QIcon(), "Street", self)
+        toggleSteelAction = QAction(QIcon(), "Steel", self)
+
+        toggleWoodAction.setCheckable(True)
+        toggleStreetAction.setCheckable(True)
+        toggleSteelAction.setCheckable(True)
+
+        toggleWoodAction.triggered.connect(self.app.drawing.toggleWood)
+        toggleSteelAction.triggered.connect(self.app.drawing.toggleSteel)
+        toggleStreetAction.triggered.connect(self.app.drawing.toggleStreet)
+
+        materialActionGroup = QActionGroup(self)
+        materialActionGroup.addAction(toggleStreetAction)
+        materialActionGroup.addAction(toggleWoodAction)
+        materialActionGroup.addAction(toggleSteelAction)
+        materialActionGroup.setExclusive(True)
+
+        plotAction = QAction(QIcon(), "Plot", self)
+        plotAction.triggered.connect(self.plotBridge)
+
         toolbar = self.addToolBar("Tools")
         toolbar.addAction(newNodeAction)
         toolbar.addAction(newRockAction)
+        toolbar.addSeparator()
+        toolbar.addActions(materialActionGroup.actions())
+        toolbar.addSeparator()
+        toolbar.addAction(plotAction)
 
         mainMenu = self.menuBar()
         fileMenu = mainMenu.addMenu("&File")
@@ -66,6 +93,16 @@ class MainWindow(QMainWindow):
         self.app.drawing.onObjectChange.connect(self.setObjectInfo)
         self.app.prop.onValueChanged.connect(self.app.drawing.update)
 
+        toggleSteelAction.activate(QAction.Trigger)
+
+    @pyqtSlot()
+    def plotBridge(self):
+        optimizer = LocalSearchOptimizer(self.app.drawing.state)
+        try:
+            optimizer.plot()
+        except (ArithmeticError, AssertionError) as e:
+            pass
+
     @ pyqtSlot()
     def openFile(self):
         filepath, ext = QFileDialog.getOpenFileName(
@@ -87,12 +124,12 @@ class MainWindow(QMainWindow):
     @ pyqtSlot(int)
     def setGridSize(self, val):
         self.gridSizeLabel.setText("Grid Size: {}".format(val))
-        self.repaint()
+        self.update()
 
     @ pyqtSlot(float, float)
     def setCursorInfo(self, x, y):
         self.cursorInfoLabel.setText("Position: ({:.1f}, {:.1f})".format(x, y))
-        self.repaint()
+        self.update()
 
     @ pyqtSlot(list)
     def setObjectInfo(self, objects):
@@ -104,4 +141,4 @@ class MainWindow(QMainWindow):
         else:
             self.app.prop.setActiveObject(None)
 
-        self.repaint()
+        self.update()

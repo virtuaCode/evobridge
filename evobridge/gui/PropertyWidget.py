@@ -59,11 +59,13 @@ class PropertyWidget(QWidget):
         self.yNodeSpin.setMaximum(255)
         self.yNodeSpin.setMinimumWidth(90)
 
-        self.supportNodeCheck = QCheckBox()
+        self.hSupportNodeCheck = QCheckBox()
+        self.vSupportNodeCheck = QCheckBox()
 
         nodePropLayout.addRow("X Position:", self.xNodeSpin)
         nodePropLayout.addRow("Y Position:", self.yNodeSpin)
-        nodePropLayout.addRow("Support:", self.supportNodeCheck)
+        nodePropLayout.addRow("H Support:", self.hSupportNodeCheck)
+        nodePropLayout.addRow("V Support:", self.vSupportNodeCheck)
 
         self.nodeGroup.setLayout(nodePropLayout)
         self.nodeGroup.setVisible(False)
@@ -100,8 +102,13 @@ class PropertyWidget(QWidget):
         self.onValueChanged.emit()
 
     @pyqtSlot(int)
-    def setSupportValue(self, val):
-        self.activeObject.support = val == Qt.Checked
+    def setHSupportValue(self, val):
+        self.activeObject.h_support = val == Qt.Checked
+        self.onValueChanged.emit()
+
+    @pyqtSlot(int)
+    def setVSupportValue(self, val):
+        self.activeObject.v_support = val == Qt.Checked
         self.onValueChanged.emit()
 
     def setActiveObject(self, obj):
@@ -115,12 +122,15 @@ class PropertyWidget(QWidget):
             self.nodeGroup.setVisible(True)
             self.xNodeSpin.setValue(obj.x)
             self.yNodeSpin.setValue(obj.y)
-            self.supportNodeCheck.setCheckState(
-                Qt.Checked if obj.support else Qt.Unchecked)
+            self.hSupportNodeCheck.setCheckState(
+                Qt.Checked if obj.h_support else Qt.Unchecked)
+            self.vSupportNodeCheck.setCheckState(
+                Qt.Checked if obj.v_support else Qt.Unchecked)
 
             self.xNodeSpin.valueChanged.connect(self.setXValue)
             self.yNodeSpin.valueChanged.connect(self.setYValue)
-            self.supportNodeCheck.stateChanged.connect(self.setSupportValue)
+            self.hSupportNodeCheck.stateChanged.connect(self.setHSupportValue)
+            self.vSupportNodeCheck.stateChanged.connect(self.setVSupportValue)
 
         elif isinstance(obj, Rock):
             self.setVisible(True)

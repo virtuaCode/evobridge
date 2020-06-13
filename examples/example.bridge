@@ -1,26 +1,26 @@
 Rock 0 205 80 50
 Rock 215 215 40 40
-Node 80 205 1
-Node 113 209 0
-Node 147 212 0
-Node 181 214 0
-Node 215 215 1
-Node 94 182 0
-Node 165 174 0
-Node 198 188 0
-Node 127 174 0
-Member 1 8
-Member 5 8
-Member 2 8
-Member 6 8
-Member 6 2
-Member 3 2
-Member 7 6
-Member 3 6
-Member 3 7
-Member 4 7
-Member 4 3
-Member 2 1
-Member 0 5
-Member 0 1
-Member 1 5
+Node 80 205 1 1
+Node 113 209 0 0
+Node 146 212 0 0
+Node 181 214 0 0
+Node 215 215 0 1
+Node 94 182 0 0
+Node 165 174 0 0
+Node 198 188 0 0
+Node 127 174 0 0
+Member 1 8 1
+Member 5 8 1
+Member 2 8 1
+Member 6 8 1
+Member 6 2 1
+Member 7 6 1
+Member 3 6 1
+Member 3 7 1
+Member 4 7 1
+Member 0 5 1
+Member 1 5 1
+Member 1 0 0
+Member 2 1 0
+Member 3 2 0
+Member 4 3 0

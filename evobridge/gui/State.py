@@ -1,4 +1,4 @@
-from .Objects import Node, Rock, Member
+from .Objects import Node, Rock, Member, Material
 from PyQt5.QtGui import QPainter
 
 
@@ -52,16 +52,21 @@ class State():
         if isinstance(obj, Rock):
             self.removeRock(obj)
 
-    def toggleMember(self, node_a: Node, node_b: Node):
+    def toggleMember(self, node_a: Node, node_b: Node, material):
         a = self.nodes.index(node_a)
         b = self.nodes.index(node_b)
-        assert a >= 0
-        assert b >= 0
-        assert a != b
-        assert a < len(self.nodes)
-        assert b < len(self.nodes)
+        if a < 0:
+            return
+        if b < 0:
+            return
+        if a == b:
+            return
+        if a >= len(self.nodes):
+            return
+        if b >= len(self.nodes):
+            return
 
-        member = Member(node_a, node_b)
+        member = Member(node_a, node_b, material)
 
         if member in self.members:
             self.members.remove(member)
@@ -84,12 +89,12 @@ class State():
 
         return None
 
-    def draw(self, p: QPainter):
+    def draw(self, p: QPainter, scale: float):
         for rock in self.rocks:
-            rock.draw(p)
+            rock.draw(p, scale)
 
         for member in self.members:
-            member.draw(p)
+            member.draw(p, scale)
 
         for node in self.nodes:
-            node.draw(p)
+            node.draw(p, scale)

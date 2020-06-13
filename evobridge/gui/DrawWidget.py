@@ -4,7 +4,7 @@ from PyQt5.QtGui import (
 from PyQt5.QtWidgets import (QFileDialog, QFrame)
 from PyQt5.QtCore import pyqtSignal, pyqtSlot, Qt, QPointF
 from .State import State
-from .Objects import Node, Rock
+from .Objects import Node, Rock, Material
 import os
 import math
 from operator import sub
@@ -22,8 +22,11 @@ class DrawWidget(QFrame):
     scroll_enabled = True
     zoom_enabled = True
     moved_rest = None
+    mouse_moved = False
+    left_clicked = False
     snap = 1
     min_move_distance = 10
+    selected_material = Material.WOOD
 
     def __init__(self):
         QFrame.__init__(self)
@@ -58,17 +61,29 @@ class DrawWidget(QFrame):
         self.state.addRock(Rock(127, 127, 40, 40))
         self.repaint()
 
+    @pyqtSlot()
+    def toggleWood(self):
+        self.selected_material = Material.WOOD
+
+    @pyqtSlot()
+    def toggleSteel(self):
+        self.selected_material = Material.STEEL
+
+    @pyqtSlot()
+    def toggleStreet(self):
+        self.selected_material = Material.STREET
+
     def paintEvent(self, event):
 
         p = self.painter
         p.begin(self)
 
         p.translate(QPointF(self.x_offset, self.y_offset))
-        p.scale(2**self.zoom, 2**self.zoom)
-        p.scaling = 2**self.zoom
+        scale = 2**self.zoom
+        p.scale(scale, scale)
 
         self.drawGrid(p)
-        self.state.draw(p)
+        self.state.draw(p, scale)
 
         p.end()
 
@@ -118,9 +133,8 @@ class DrawWidget(QFrame):
         self.prevY = event.y()
 
         if event.buttons() & Qt.LeftButton:
-
-            self.scroll_enabled = False
             self.zoom_enabled = False
+            self.left_clicked = True
 
             (mx, my) = self.posToWorldPos(event.x(), event.y())
 
@@ -128,6 +142,7 @@ class DrawWidget(QFrame):
             self.clicked_object = obj
 
             if obj is not None:
+                self.scroll_enabled = False
                 if event.modifiers() & Qt.ControlModifier:
                     self.control_pressed = True
                     if obj in self.selectedObjects:
@@ -147,10 +162,6 @@ class DrawWidget(QFrame):
 
                 self.click_pos = (event.x(), event.y())
 
-            else:
-                for o in self.selectedObjects:
-                    o.selected = False
-                self.selectedObjects.clear()
         elif event.buttons() & Qt.RightButton:
             (mx, my) = self.posToWorldPos(event.x(), event.y())
 
@@ -159,7 +170,7 @@ class DrawWidget(QFrame):
             if isinstance(obj, Node):
                 for o in self.selectedObjects:
                     if isinstance(o, Node):
-                        self.state.toggleMember(obj, o)
+                        self.state.toggleMember(obj, o, self.selected_material)
 
         self.emitSelectedObjects()
         self.repaint()
@@ -176,13 +187,18 @@ class DrawWidget(QFrame):
                     self.selectedObjects.clear()
                     self.clicked_object.selected = True
                     self.selectedObjects.append(self.clicked_object)
+        elif not self.mouse_moved and self.left_clicked:
+            for o in self.selectedObjects:
+                o.selected = False
+                self.selectedObjects.clear()
 
         self.clicked_object = None
-        self.click_event = None
         self.move_objects = False
         self.control_pressed = False
         self.scroll_enabled = True
         self.zoom_enabled = True
+        self.mouse_moved = False
+        self.left_clicked = False
 
         self.repaint()
 
@@ -197,7 +213,14 @@ class DrawWidget(QFrame):
             self.y_offset -= self.prevY - event.y()
             repaint = True
 
-        if self.clicked_object is not None:
+        if self.clicked_object is None:
+            if self.scroll_enabled and (event.buttons() & Qt.LeftButton):
+                self.mouse_moved = True
+                self.x_offset -= self.prevX - event.x()
+                self.y_offset -= self.prevY - event.y()
+                repaint = True
+
+        else:
             if not self.move_objects:
                 x, y = self.click_pos
                 distance = math.hypot(x-event.x(), y-event.y())
@@ -224,6 +247,7 @@ class DrawWidget(QFrame):
 
                 self.emitSelectedObjects()
                 repaint = True
+            #self.scroll_view = True
 
         self.prevX = event.x()
         self.prevY = event.y()
