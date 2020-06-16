@@ -53,12 +53,14 @@ class DrawWidget(QFrame):
 
     @pyqtSlot()
     def addNewNode(self):
-        self.state.addNode(Node(127, 127))
+        x, y = self.center()
+        self.state.addNode(Node(x, y))
         self.repaint()
 
     @pyqtSlot()
     def addNewRock(self):
-        self.state.addRock(Rock(127, 127, 40, 40))
+        x, y = self.center()
+        self.state.addRock(Rock(x, y, 40, 40))
         self.repaint()
 
     @pyqtSlot()
@@ -72,6 +74,16 @@ class DrawWidget(QFrame):
     @pyqtSlot()
     def toggleStreet(self):
         self.selected_material = Material.STREET
+
+    def setState(self, state: State):
+        self.state = state
+        self.selectedObjects.clear()
+        self.emitSelectedObjects()
+        self.repaint()
+
+    def center(self):
+        width, height = self.size().width(), self.size().height()
+        return self.posToWorldPos(width/2, height/2)
 
     def paintEvent(self, event):
 
@@ -285,6 +297,3 @@ class DrawWidget(QFrame):
 
     def scale(self):
         return 2**self.zoom
-
-    def setState(self, state: State):
-        self.state = state

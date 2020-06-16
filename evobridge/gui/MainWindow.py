@@ -12,13 +12,17 @@ moduleDir = os.path.dirname(__file__)
 
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, file=None):
         QMainWindow.__init__(self)
 
         self.app = AppWidget()
         statusbar = self.statusBar()
 
-        openAction = QAction("&Open...", self)
+        newAction = QAction("&New File", self)
+        newAction.setShortcut("Ctrl+N")
+        newAction.triggered.connect(self.newFile)
+
+        openAction = QAction("&Open File...", self)
         openAction.setShortcut("Ctrl+O")
         openAction.triggered.connect(self.openFile)
 
@@ -57,6 +61,9 @@ class MainWindow(QMainWindow):
         plotAction = QAction(QIcon(), "Plot", self)
         plotAction.triggered.connect(self.plotBridge)
 
+        optimizeAction = QAction(QIcon(), "Optimize", self)
+        optimizeAction.triggered.connect(self.optimizeBridge)
+
         toolbar = self.addToolBar("Tools")
         toolbar.addAction(newNodeAction)
         toolbar.addAction(newRockAction)
@@ -64,9 +71,11 @@ class MainWindow(QMainWindow):
         toolbar.addActions(materialActionGroup.actions())
         toolbar.addSeparator()
         toolbar.addAction(plotAction)
+        toolbar.addAction(optimizeAction)
 
         mainMenu = self.menuBar()
         fileMenu = mainMenu.addMenu("&File")
+        fileMenu.addAction(newAction)
         fileMenu.addAction(openAction)
         fileMenu.addAction(saveAsAction)
 
@@ -95,6 +104,14 @@ class MainWindow(QMainWindow):
 
         toggleSteelAction.activate(QAction.Trigger)
 
+        if file:
+            try:
+                self.app.drawing.state = State.loadState(file)
+                self.setWindowFilePath(file)
+                self.update()
+            except:
+                pass
+
     @pyqtSlot()
     def plotBridge(self):
         optimizer = LocalSearchOptimizer(self.app.drawing.state)
@@ -103,12 +120,28 @@ class MainWindow(QMainWindow):
         except (ArithmeticError, AssertionError) as e:
             pass
 
+    @pyqtSlot()
+    def optimizeBridge(self):
+        optimizer = LocalSearchOptimizer(
+            self.app.drawing.state)
+        try:
+            optimizer.run()
+            optimizer.plot()
+        except (ArithmeticError, AssertionError) as e:
+            print(e)
+
+    @ pyqtSlot()
+    def newFile(self):
+        self.app.drawing.setState(State())
+        self.setWindowFilePath(None)
+        self.update()
+
     @ pyqtSlot()
     def openFile(self):
         filepath, ext = QFileDialog.getOpenFileName(
             self, 'Open bridge file', os.getcwd(), "Bridge files (*.bridge)")
         if len(filepath) > 0:
-            self.app.drawing.state = State.loadState(filepath)
+            self.app.drawing.setState(State.loadState(filepath))
             self.setWindowFilePath(filepath)
             self.update()
 

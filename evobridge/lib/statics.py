@@ -61,13 +61,3 @@ def solve(nodes, members, supports, loads):
     RFmat = x[Ms:]
 
     return (detA, MFmat, RFmat)
-
-# print(Nodes)
-# print(Members)
-
-
-# %%
-#(detA, MFmat, RFmat) = solve(config=config)
-
-
-# %%

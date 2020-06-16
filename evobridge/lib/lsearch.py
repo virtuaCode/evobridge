@@ -18,16 +18,19 @@ class Optimizer():
 
 class LocalSearchOptimizer(Optimizer):
 
+    MAX_MEMBER_LENGTH = 40
+
     def __init__(self, state: State,
                  mutate=None,
                  accept=None,
                  node_weight=10,
                  street_weight=8,
                  debug=False):
+        state = state.clone()
 
         self.mutate = mutate or LocalSearchOptimizer.create_onebit_mutate()
         self.accept = accept or LocalSearchOptimizer.create_threshold_accept(
-            100, 0.99)
+            0.0001, 0.99)
         self.supports = np.array([[i, int(node.h_support), int(node.v_support)] for i, node in enumerate(
             state.nodes) if node.v_support or node.h_support], dtype=int).reshape((-1, 3))
         fixed_nodes = [node for node in state.nodes if node in set(
@@ -62,13 +65,16 @@ class LocalSearchOptimizer(Optimizer):
     def create_threshold_accept(temp, damping):
         return lambda Af, Bf, t: Bf > Af or abs(Af - Bf) <= damping ** t * temp
 
-    def run():
-        return self._local_search(self._evaluate, self.mutate, self.accept, self.genotype)
+    def run(self):
+        (genotype, F) = self._local_search(
+            self._evaluate, self.mutate, self.accept, self.genotype, max_iter=10000)
+        self.genotype = genotype
+        return F
 
-    def _local_search(eval, mutate, accept, species, max_iter=1000):
+    def _local_search(self, eval, mutate, accept, species, max_iter=1000):
         t = 0
         A = species
-        F = [eval(A[t])]
+        F = [eval(A)]
 
         while t < max_iter:
             B = mutate(A)
@@ -82,21 +88,24 @@ class LocalSearchOptimizer(Optimizer):
 
         return (A, F)
 
-    def _in_allowed_area(nodes):
+    def _in_allowed_area(self, nodes):
         # TODO: implement line intersection check
-        return not np.any(((nodes[:, 0] < 20) & (nodes[:, 1] < 40)) | ((nodes[:, 0] > 235) & (nodes[:, 1] < 40)))
+        # return not np.any(((nodes[:, 0] < 20) & (nodes[:, 1] < 40)) | ((nodes[:, 0] > 235) & (nodes[:, 1] < 40)))
+        return True
 
-    def _evaluate(genotype):
-        nodes = np.array([*self.fixed_nodes_pos, *genotype]).reshape(-1, 2)
+    def _evaluate(self, genotype):
+        nodes = np.array(
+            [*self.fixed_nodes_pos.flatten(), *genotype]).reshape(-1, 2)
         supports = self.supports
         members = self.members_idx
         loads = self.loads
 
-        if not in_allowed_area(nodes):
+        if not self._in_allowed_area(nodes):
             return -10e8
 
-        member_length = np.hypot.reduce(
-            np.subtract.reduce(np.transpose(nodes[members], axes=(0, 2, 1)), axis=2), axis=1)
+        tmat = np.transpose(nodes[members], axes=(0, 2, 1))
+        submat = np.subtract.reduce(tmat, axis=2)
+        member_length = np.hypot.reduce(submat, axis=1, dtype=float)
 
         (detA, MFmat, RFmat) = solve(
             nodes, members, supports, loads)
@@ -104,10 +113,11 @@ class LocalSearchOptimizer(Optimizer):
         if detA == 0:
             return -10e8
 
-        if np.any(member_length > MAX_MEMBER_LENGTH):
-            return -np.sum(member_length)
+        if np.any(member_length > self.MAX_MEMBER_LENGTH):
+            too_long = member_length[member_length > self.MAX_MEMBER_LENGTH]
+            return -np.power(np.log(np.sum(too_long)+1)+1, 2)
 
-        return (1.0/(1.0+np.max(np.abs(MFmat)))) * 1000
+        return 1/np.power(np.sum(np.abs(MFmat)), 2)
 
     def _solve(self, genotype=None):
         genotype = genotype or self.genotype

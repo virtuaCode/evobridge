@@ -9,6 +9,13 @@ class State():
         self.rocks = rocks
         self.members = members
 
+    def clone(self):
+        new_nodes = [n.clone() for n in self.nodes]
+        new_rocks = [r.clone() for r in self.rocks]
+        new_members = [Member(new_nodes[self.nodes.index(m.a)], new_nodes[self.nodes.index(
+            m.b)], material=m.material) for m in self.members]
+        return State(new_nodes, new_rocks, new_members)
+
     @classmethod
     def loadState(cls, path):
         nodes = []

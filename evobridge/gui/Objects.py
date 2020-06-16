@@ -47,6 +47,9 @@ class Rock(StateObject):
         self.w = w
         self.h = h
 
+    def clone(self):
+        return Rock(self.x, self.y, self.w, self.h)
+
     @classmethod
     def fromString(cls, line: str):
         cname, *params = line.split(" ")
@@ -95,6 +98,9 @@ class Node(StateObject):
         super().__init__(x, y)
         self.h_support = bool(h_support)
         self.v_support = bool(v_support)
+
+    def clone(self):
+        return Node(self.x, self.y, h_support=self.h_support, v_support=self.v_support)
 
     @classmethod
     def fromString(cls, line: str):

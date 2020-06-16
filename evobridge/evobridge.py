@@ -12,7 +12,9 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationDisplayName("EvoBridge")
 
-    window = MainWindow()
+    args = app.arguments()
+
+    window = MainWindow(args[1] if len(args) == 2 else None)
     app.installEventFilter(window)
     window.resize(800, 600)
     window.show()
