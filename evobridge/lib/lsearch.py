@@ -7,6 +7,8 @@ from .statics import solve
 from ..gui.Objects import Material
 import matplotlib.colors as col
 import matplotlib.cm as cm
+from .graycode import grayToStdbin
+from PyQt5.QtGui import QGuiApplication
 
 
 class Optimizer():
@@ -25,12 +27,13 @@ class LocalSearchOptimizer(Optimizer):
                  accept=None,
                  node_weight=10,
                  street_weight=8,
-                 debug=False):
+                 debug=False,
+                 onupdate=None):
         state = state.clone()
-
+        self.objFunc = "sum"
         self.mutate = mutate or LocalSearchOptimizer.create_onebit_mutate()
         self.accept = accept or LocalSearchOptimizer.create_threshold_accept(
-            0.0001, 0.99)
+            10000, 0.99)
         self.supports = np.array([[i, int(node.h_support), int(node.v_support)] for i, node in enumerate(
             state.nodes) if node.v_support or node.h_support], dtype=int).reshape((-1, 3))
         fixed_nodes = [node for node in state.nodes if node in set(
@@ -56,22 +59,30 @@ class LocalSearchOptimizer(Optimizer):
         if debug:
             print("Created {}:".format(self.__class__.__name__))
             print("Fixed Nodes:", self.fixed_nodes_pos)
-            print("Genotyope:", self.genotype)
+            print("Genotype:", self.genotype)
             print("Members:", self.members_idx)
             print("Supports:", self.supports.shape, self.supports)
             print("Loads:", self.loads)
 
     @ staticmethod
-    def create_threshold_accept(temp, damping):
-        return lambda Af, Bf, t: Bf > Af or abs(Af - Bf) <= damping ** t * temp
+    def create_threshold_accept(temp, damping, minimize=True):
+        return lambda Af, Bf, t: Bf < Af or abs(Af - Bf) <= damping ** t * temp
 
-    def run(self):
+    def run(self, progress=None, max_iter=1000, objFunc="sum"):
+        self.objFunc = objFunc
         (genotype, F) = self._local_search(
-            self._evaluate, self.mutate, self.accept, self.genotype, max_iter=10000)
+            self._evaluate, self.mutate, self.accept, self.genotype, max_iter=max_iter, progress=progress)
         self.genotype = genotype
-        return F
+        self.fitness = F
 
-    def _local_search(self, eval, mutate, accept, species, max_iter=1000):
+    def _local_search(self, eval, mutate, accept, species, max_iter=1000, progress=None):
+        if progress:
+            progress.setEnabled(True)
+            progress.setMaximum(max_iter)
+            progress.setMinimum(0)
+            progress.setValue(0)
+            QGuiApplication.processEvents()
+
         t = 0
         A = species
         F = [eval(A)]
@@ -80,11 +91,21 @@ class LocalSearchOptimizer(Optimizer):
             B = mutate(A)
             Bf = eval(B)
             t += 1
+
+            if progress and t % 100:
+                progress.setValue(t)
+                QGuiApplication.processEvents()
+
             if accept(F[t-1], Bf, t):
                 A = B
                 F.append(Bf)
             else:
                 F.append(F[-1])
+
+        if progress:
+            progress.setEnabled(False)
+            progress.setValue(max_iter)
+            QGuiApplication.processEvents()
 
         return (A, F)
 
@@ -95,13 +116,13 @@ class LocalSearchOptimizer(Optimizer):
 
     def _evaluate(self, genotype):
         nodes = np.array(
-            [*self.fixed_nodes_pos.flatten(), *genotype]).reshape(-1, 2)
+            [*self.fixed_nodes_pos.flatten(), *grayToStdbin(genotype)]).reshape(-1, 2)
         supports = self.supports
         members = self.members_idx
         loads = self.loads
 
         if not self._in_allowed_area(nodes):
-            return -10e8
+            return 10e10
 
         tmat = np.transpose(nodes[members], axes=(0, 2, 1))
         submat = np.subtract.reduce(tmat, axis=2)
@@ -111,16 +132,20 @@ class LocalSearchOptimizer(Optimizer):
             nodes, members, supports, loads)
 
         if detA == 0:
-            return -10e8
+            return 10e10
 
-        if np.any(member_length > self.MAX_MEMBER_LENGTH):
-            too_long = member_length[member_length > self.MAX_MEMBER_LENGTH]
-            return -np.power(np.log(np.sum(too_long)+1)+1, 2)
+        # if np.any(member_length > self.MAX_MEMBER_LENGTH):
+        too_long = member_length[member_length > self.MAX_MEMBER_LENGTH]
+        #    return -np.power(np.log(np.sum(too_long)+1)+1, 2)
+        if self.objFunc == "sum":
+            value = np.sum(np.abs(MFmat))
+        else:
+            value = np.mean(np.abs(MFmat))
 
-        return 1/np.power(np.sum(np.abs(MFmat)), 2)
+        return value + np.power(np.sum(too_long, initial=0), 2)
 
     def _solve(self, genotype=None):
-        genotype = genotype or self.genotype
+        genotype = grayToStdbin(genotype or self.genotype)
         genotype = np.array(
             genotype, dtype=int).reshape(-1, 2)
         nodes = np.vstack([self.fixed_nodes_pos, genotype])
@@ -143,14 +168,23 @@ class LocalSearchOptimizer(Optimizer):
         except Exception as e:
             raise ArithmeticError from e
 
+        fitness = self._evaluate(self.genotype)
+
         genotype = np.array(
-            self.genotype, dtype=int).reshape(-1, 2)
+            grayToStdbin(self.genotype), dtype=int).reshape(-1, 2)
         Nodes = np.vstack([self.fixed_nodes_pos, genotype])
         Members = self.members_idx
         Supports = self.supports
         Loads = self.loads
 
+        tmat = np.transpose(Nodes[Members], axes=(0, 2, 1))
+        submat = np.subtract.reduce(tmat, axis=2)
+        member_lengths = np.hypot.reduce(submat, axis=1, dtype=float)
+
         plt.figure(figsize=figsize)
+        plt.subplot(2, 1, 1)
+        plt.grid()
+
         cmap = plt.get_cmap('coolwarm')
         abs_val = np.abs(MFmat)
         max_abs = np.max(abs_val)
@@ -159,7 +193,7 @@ class LocalSearchOptimizer(Optimizer):
         for i in range(len(Members[:, 0])):
             force = MFmat[i, 0]
             plt.plot(Nodes[Members[i, :], 0],
-                     Nodes[Members[i, :], 1], color=cmap(norm(force)), lw=5)
+                     Nodes[Members[i, :], 1], linestyle=(":" if member_lengths[i] > self.MAX_MEMBER_LENGTH else "-"), color=cmap(norm(force)), lw=5)
             nodes = Nodes[Members[i, :]]
             center = (np.sum(nodes, axis=0)/2.0).reshape(2, -1)
 
@@ -201,6 +235,16 @@ class LocalSearchOptimizer(Optimizer):
 
         if title:
             plt.title(title)
+        else:
+            plt.title("Fitness: {}".format(fitness))
+
+        ax = plt.subplot(2, 1, 2)
+        ax.set_yscale("log")
+        plt.plot(range(len(self.fitness)), self.fitness)
+        plt.grid()
+        plt.xlabel("Iterations")
+        plt.ylabel("Fitness")
+
         plt.show()
 
     @ staticmethod

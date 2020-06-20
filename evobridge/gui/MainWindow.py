@@ -1,7 +1,7 @@
 from .AppWidget import AppWidget
 from PyQt5.QtWidgets import (
-    QAction, QLabel, QMainWindow, QFileDialog, QActionGroup)
-from PyQt5.QtGui import (QIcon)
+    QAction, QLabel, QMainWindow, QFileDialog, QActionGroup, QProgressBar, QSpacerItem)
+from PyQt5.QtGui import (QIcon, QGuiApplication)
 from PyQt5.QtCore import (Qt, pyqtSlot)
 
 from .State import State
@@ -14,6 +14,8 @@ moduleDir = os.path.dirname(__file__)
 class MainWindow(QMainWindow):
     def __init__(self, file=None):
         QMainWindow.__init__(self)
+
+        self.obj_func_type = "sum"
 
         self.app = AppWidget()
         statusbar = self.statusBar()
@@ -64,6 +66,10 @@ class MainWindow(QMainWindow):
         optimizeAction = QAction(QIcon(), "Optimize", self)
         optimizeAction.triggered.connect(self.optimizeBridge)
 
+        self.progress = QProgressBar()
+        self.progress.setFixedWidth(100)
+        self.progress.setEnabled(False)
+
         toolbar = self.addToolBar("Tools")
         toolbar.addAction(newNodeAction)
         toolbar.addAction(newRockAction)
@@ -72,6 +78,8 @@ class MainWindow(QMainWindow):
         toolbar.addSeparator()
         toolbar.addAction(plotAction)
         toolbar.addAction(optimizeAction)
+        toolbar.addWidget(self.progress)
+        # toolbar.addSeparator()
 
         mainMenu = self.menuBar()
         fileMenu = mainMenu.addMenu("&File")
@@ -125,8 +133,9 @@ class MainWindow(QMainWindow):
         optimizer = LocalSearchOptimizer(
             self.app.drawing.state)
         try:
-            optimizer.run()
-            optimizer.plot()
+            optimizer.run(progress=self.progress, max_iter=2000,
+                          objFunc=self.obj_func_type)
+            optimizer.plot(figsize=(12, 7))
         except (ArithmeticError, AssertionError) as e:
             print(e)
 
