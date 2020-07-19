@@ -12,3 +12,12 @@ def grayToStdbin(genotype):
         return bin
 
     return bytearray(map(transform, genotype))
+
+
+def stdbinToGray(genotype):
+    assert type(genotype) == bytearray
+
+    def transform(std):
+        return std ^ (std >> 1)
+
+    return bytearray(map(transform, genotype))

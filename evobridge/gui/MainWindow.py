@@ -1,12 +1,20 @@
 from .AppWidget import AppWidget
 from PyQt5.QtWidgets import (
-    QAction, QLabel, QMainWindow, QFileDialog, QActionGroup, QProgressBar, QSpacerItem)
+    QAction, QLabel, QMainWindow, QFileDialog, QActionGroup, QProgressBar, QSpacerItem, QAbstractButton, QMessageBox)
 from PyQt5.QtGui import (QIcon, QGuiApplication)
 from PyQt5.QtCore import (Qt, pyqtSlot)
 
 from .State import State
 import os
+import sys
 from ..lib.lsearch import LocalSearchOptimizer
+from .Objects import Mutation, ObjectiveFunction
+from ..lib.functions import create_onebit_mutate, create_threshold_accept, create_propbit_mutate
+
+from ..lib.optimize import OptimizerFactory
+
+from enum import Enum
+import traceback
 
 moduleDir = os.path.dirname(__file__)
 
@@ -15,9 +23,9 @@ class MainWindow(QMainWindow):
     def __init__(self, file=None):
         QMainWindow.__init__(self)
 
-        self.obj_func_type = "sum"
+        self.factory = OptimizerFactory()
 
-        self.app = AppWidget()
+        self.app = AppWidget(self.factory)
         statusbar = self.statusBar()
 
         newAction = QAction("&New File", self)
@@ -117,27 +125,46 @@ class MainWindow(QMainWindow):
                 self.app.drawing.state = State.loadState(file)
                 self.setWindowFilePath(file)
                 self.update()
-            except:
-                pass
+            except BaseException as e:
+                traceback.print_exc()
+                #print(e, file=sys.stderr)
 
     @pyqtSlot()
     def plotBridge(self):
-        optimizer = LocalSearchOptimizer(self.app.drawing.state)
+
         try:
-            optimizer.plot()
-        except (ArithmeticError, AssertionError) as e:
-            pass
+            optimizer = self.factory.createOptimizer(self.app.drawing.state)
+            optimizer.plot(figsize=(12, 7))
+        except BaseException as e:
+            traceback.print_exc()
+            #print(e.__traceback__, file=sys.stderr)
+            msgBox = QMessageBox()
+            msgBox.setIcon(QMessageBox.Critical)
+            msgBox.setText("Failed to plot bridge")
+            msgBox.setMinimumWidth(500)
+            msgBox.setInformativeText(str(e))
+            msgBox.setStandardButtons(QMessageBox.Ok)
+            msgBox.setDefaultButton(QMessageBox.Ok)
+            msgBox.exec()
 
     @pyqtSlot()
     def optimizeBridge(self):
-        optimizer = LocalSearchOptimizer(
-            self.app.drawing.state)
+
         try:
-            optimizer.run(progress=self.progress, max_iter=2000,
-                          objFunc=self.obj_func_type)
-            optimizer.plot(figsize=(12, 7))
-        except (ArithmeticError, AssertionError) as e:
-            print(e)
+            optimizer = self.factory.createOptimizer(self.app.drawing.state)
+            optimizer.run(progress=self.progress, max_iter=10000)
+            optimizer.plot(figsize=(12, 7), show_fitness_graph=True)
+        except BaseException as e:
+            traceback.print_exc()
+            #print(e.__traceback__, file=sys.stderr)
+            msgBox = QMessageBox()
+            msgBox.setIcon(QMessageBox.Critical)
+            msgBox.setText("Failed to optimize bridge")
+            msgBox.setMinimumWidth(500)
+            msgBox.setInformativeText(str(e))
+            msgBox.setStandardButtons(QMessageBox.Ok)
+            msgBox.setDefaultButton(QMessageBox.Ok)
+            msgBox.exec()
 
     @ pyqtSlot()
     def newFile(self):

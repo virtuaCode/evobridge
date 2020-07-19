@@ -5,11 +5,28 @@ from PyQt5.QtGui import QBrush, QColor, QPainter, QPen, QTransform, QPainterPath
 import random
 from enum import Enum
 
+MAX_MEMBER_LENGTHS = [
+    40,  # STREET
+    40,  # WOOD
+    100  # STEEL
+]
+
 
 class Material(Enum):
     STREET = 0
     WOOD = 1
     STEEL = 2
+
+
+class Mutation(Enum):
+    OneBitFlip = 0
+    ProbBitFlip = 1
+
+
+class ObjectiveFunction(Enum):
+    Sum = 0
+    Mean = 1
+    RootMeanSquare = 2
 
 
 class StateObject():
@@ -198,6 +215,9 @@ class Member():
             pen.setColor(QColor("peru"))
         elif self.material == Material.STEEL:
             pen.setColor(QColor("brown"))
+
+        if math.hypot(self.a.x - self.b.x, self.a.y - self.b.y) > MAX_MEMBER_LENGTHS[self.material.value]:
+            pen.setStyle(Qt.DotLine)
 
         pen.setWidthF(4)
         pen.setCosmetic(True)

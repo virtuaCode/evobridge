@@ -1,6 +1,12 @@
 from .Objects import Node, Rock, Member, Material
 from PyQt5.QtGui import QPainter
 
+max_lengths = [
+    40,  # STREET
+    40,  # WOOD
+    100  # STEEL
+]
+
 
 class State():
 

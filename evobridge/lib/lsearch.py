@@ -2,78 +2,217 @@ import random
 import numpy as np
 from itertools import chain
 import matplotlib.pyplot as plt
-from ..gui.State import State
+from matplotlib.colors import ListedColormap
+from ..gui.State import State, max_lengths
 from .statics import solve
-from ..gui.Objects import Material
+from ..gui.Objects import Material, ObjectiveFunction, Mutation
 import matplotlib.colors as col
 import matplotlib.cm as cm
-from .graycode import grayToStdbin
+from .genotype import toGenotype, fromGenotype
+from .graycode import grayToStdbin, stdbinToGray
 from PyQt5.QtGui import QGuiApplication
+from enum import Enum
+from .functions import create_onebit_mutate, create_threshold_accept
+from .bridge import Bridge
+from abc import abstractmethod, ABCMeta
 
 
-class Optimizer():
+class Optimizer(object, metaclass=ABCMeta):
 
-    def run():
-        raise NotImplementedError(
-            "run not implemented for class " + cls.__name__)
+    MAX_MEMBER_LENGTHS = max_lengths
+
+    @abstractmethod
+    def __init__(self, state: State, node_weight=10, street_weight=8):
+        self.bridge = Bridge(state, node_weight=node_weight,
+                             street_weight=street_weight)
+
+    @abstractmethod
+    def run(self):
+        pass
+
+    @abstractmethod
+    def _evaluate(self):
+        pass
+
+    def _solve(self, genotype=None):
+        b = self.bridge
+        if genotype:
+            b.setGenotype(genotype)
+        supports = b.supports
+        nodes = b.nodes
+        members = b.members
+        materials = b.materials
+        loads = b.loads
+
+        try:
+            det, MF, RF = solve(nodes, members, supports, loads)
+        except e:
+            raise e
+
+        if det == 0:
+            raise ArithmeticError("Determinant is zero")
+
+        if len(MF) == 0 or len(RF) == 0:
+            raise ArithmeticError("Not solveable")
+
+        return (det, MF, RF)
+
+    def plot(self, figsize=None, title=None, ylim=None, xlim=None, show_loads=False, show_fitness_graph=False):
+        try:
+            det, MFmat, RFmat = self._solve()
+        except Exception as e:
+            raise ArithmeticError from e
+
+        b = self.bridge
+        genotype = b.genotype
+        supports = b.supports
+        nodes = b.nodes
+        members = b.members
+        materials = b.materials
+        loads = b.loads
+
+        fitness = self._evaluate(genotype)
+
+        tmat = np.transpose(nodes[members], axes=(0, 2, 1))
+        submat = np.subtract.reduce(tmat, axis=2)
+        member_lengths = np.hypot.reduce(submat, axis=1, dtype=float)
+        max_member_lengths = np.array([self.MAX_MEMBER_LENGTHS[
+            int(m)] for m in materials]).reshape(-1, 1)
+
+        rows = 2 + int(show_fitness_graph)
+        fig, axs = plt.subplots(rows, 1, figsize=figsize)
+
+        ax = axs[0]
+        material_labels = ["Street", "Wood", "Steel"]
+        colors = ["black", "peru", "brown"]
+        cmap = ListedColormap(colors, name="materials")
+        norm = col.Normalize(vmin=0, vmax=2)
+
+        for i in range(len(members[:, 0])):
+            ls = ":" if member_lengths[i] > max_member_lengths[i] else "-"
+            c = cmap(norm(int(materials[i, 0])))
+            l = material_labels[int(materials[i])]
+
+            ax.plot(nodes[members[i, :], 0],
+                    nodes[members[i, :], 1], linestyle=ls, color=c, label=l, lw=5)
+
+        def legend_without_duplicate_labels(ax):
+            handles, labels = ax.get_legend_handles_labels()
+            unique = [(h, l) for i, (h, l) in enumerate(
+                zip(handles, labels)) if l not in labels[:i]]
+            ax.legend(*zip(*unique))
+
+        mask = np.ones(nodes.shape[0], dtype=bool)
+        mask[supports[:, 0].ravel()] = 0
+        _nodes = nodes[mask].reshape(-1, 2)
+        _supports = nodes[np.invert(mask)].reshape(-1, 2)
+
+        ax.scatter(_nodes[:, 0], _nodes[:, 1], s=100,
+                   zorder=3, color="w", edgecolors="black")
+        ax.scatter(_supports[:, 0], _supports[:, 1], s=100, marker="s",
+                   zorder=3, color="w", edgecolors="black")
+
+        ax.set_aspect('equal', adjustable='box')
+
+        if ylim:
+            ax.ylim(ylim)
+
+        if xlim:
+            ax.xlim(xlim)
+
+        plt.grid()
+
+        ax = axs[1]
+
+        cmap = plt.get_cmap('coolwarm')
+        abs_val = np.abs(MFmat)
+        max_abs = np.max(abs_val)
+        norm = col.Normalize(vmin=-max_abs, vmax=max_abs)
+
+        for i in range(len(members[:, 0])):
+            force = MFmat[i, 0]
+            ls = ":" if member_lengths[i] > max_member_lengths[i] else "-"
+
+            ax.plot(nodes[members[i, :], 0],
+                    nodes[members[i, :], 1], linestyle=ls, color=cmap(norm(force)), lw=5)
+            _nodes = nodes[members[i, :]]
+            center = (np.sum(_nodes, axis=0)/2.0).reshape(2, -1)
+
+            if np.abs(force) < 1e-12:
+                c = "k"
+            elif force < 0:
+                c = "blue"
+            else:
+                c = "red"
+
+            ax.text(*center, "{:.1f}".format(force),
+                    backgroundcolor="w", color=c, weight="medium")
+
+        mask = np.ones(nodes.shape[0], dtype=bool)
+        mask[supports[:, 0].ravel()] = 0
+        _nodes = nodes[mask].reshape(-1, 2)
+        _supports = nodes[np.invert(mask)].reshape(-1, 2)
+
+        ax.scatter(_nodes[:, 0], _nodes[:, 1], s=100,
+                   zorder=3, color="w", edgecolors="black")
+        ax.scatter(_supports[:, 0], _supports[:, 1], s=100, marker="s",
+                   zorder=3, color="w", edgecolors="black")
+        plt.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax)
+
+        if show_loads:
+            for l in loads:
+                x, y = nodes[l[0].astype(int)]
+                dx, dy = l[1:]
+                ax.arrow(x, y, dx, dy, head_width=0.2, head_length=0.1,
+                         width=0.1, facecolor="w", edgecolor="black")
+
+        ax.set_aspect('equal', adjustable='box')
+
+        if ylim:
+            ax.ylim(ylim)
+
+        if xlim:
+            ax.xlim(xlim)
+
+        if title:
+            fig.suptitle(title)
+        else:
+            fig.suptitle("Fitness: {}".format(fitness))
+
+        if show_fitness_graph:
+            ax = axs[2]
+            # ax.set_yscale("log")
+            ax.plot(range(len(self.fitness_graph)),
+                    self.fitness_graph, label="Best")
+            ax.plot(range(len(self.threshold_graph)),
+                    self.threshold_graph, label="Accept")
+
+            ax.grid()
+            ax.set_xlabel("Iterations")
+            ax.set_ylabel("Fitness")
+
+        fig.show()
 
 
 class LocalSearchOptimizer(Optimizer):
 
-    MAX_MEMBER_LENGTH = 40
-
     def __init__(self, state: State,
                  mutate=None,
                  accept=None,
-                 node_weight=10,
-                 street_weight=8,
                  debug=False,
-                 onupdate=None):
-        state = state.clone()
-        self.objFunc = "sum"
-        self.mutate = mutate or LocalSearchOptimizer.create_onebit_mutate()
-        self.accept = accept or LocalSearchOptimizer.create_threshold_accept(
-            10000, 0.99)
-        self.supports = np.array([[i, int(node.h_support), int(node.v_support)] for i, node in enumerate(
-            state.nodes) if node.v_support or node.h_support], dtype=int).reshape((-1, 3))
-        fixed_nodes = [node for node in state.nodes if node in set(
-            [node for member in state.members if member.material == Material.STREET for node in [member.a, member.b]])]
-        genotype_nodes = [
-            node for node in state.nodes if node not in fixed_nodes]
-        self.nodes = [*fixed_nodes, *genotype_nodes]
-        self.fixed_nodes_pos = np.array(
-            [[node.x, 255-node.y] for node in fixed_nodes]).reshape((-1, 2))
-        self.genotype = bytearray(chain.from_iterable(
-            [[int(node.x), int(255-node.y)] for node in genotype_nodes]))
-        self.members_idx = np.array(
-            [[self.nodes.index(member.a), self.nodes.index(member.b)] for member in state.members])
-        node_loads = np.hstack([np.arange(len(self.nodes)).reshape((-1, 1)), np.full((len(self.nodes), 2), [
-                               0, -node_weight])]).reshape((-1, 3))
-        street_loads = np.array([[self.nodes.index(node), 0, -street_weight * member.length() / 2]
-                                 for member in state.members for node in [member.a, member.b]]).reshape((-1, 3))
-        self.loads = np.vstack(
-            [node_loads, street_loads])
-        genotype = bytearray(chain.from_iterable(
-            [[int(node.x), int(255-node.y)] for node in genotype_nodes]))
-
-        if debug:
-            print("Created {}:".format(self.__class__.__name__))
-            print("Fixed Nodes:", self.fixed_nodes_pos)
-            print("Genotype:", self.genotype)
-            print("Members:", self.members_idx)
-            print("Supports:", self.supports.shape, self.supports)
-            print("Loads:", self.loads)
-
-    @ staticmethod
-    def create_threshold_accept(temp, damping, minimize=True):
-        return lambda Af, Bf, t: Bf < Af or abs(Af - Bf) <= damping ** t * temp
-
-    def run(self, progress=None, max_iter=1000, objFunc="sum"):
+                 objFunc=ObjectiveFunction.Sum):
+        super().__init__(state)
         self.objFunc = objFunc
-        (genotype, F) = self._local_search(
-            self._evaluate, self.mutate, self.accept, self.genotype, max_iter=max_iter, progress=progress)
-        self.genotype = genotype
-        self.fitness = F
+        self.mutate = mutate or create_onebit_mutate()
+        self.accept = accept or create_threshold_accept(
+            10000, 0.99)
+
+    def run(self, progress=None, max_iter=1000):
+        (genotype, F, T) = self._local_search(
+            self._evaluate, self.mutate, self.accept, self.bridge.genotype, max_iter=max_iter, progress=progress)
+        self.bridge.setGenotype(genotype)
+        self.fitness_graph = F
+        self.threshold_graph = T
 
     def _local_search(self, eval, mutate, accept, species, max_iter=1000, progress=None):
         if progress:
@@ -86,9 +225,10 @@ class LocalSearchOptimizer(Optimizer):
         t = 0
         A = species
         F = [eval(A)]
+        T = [accept(F[t], F[t], t)[1]]
 
         while t < max_iter:
-            B = mutate(A)
+            B = tuple(map(mutate, A))
             Bf = eval(B)
             t += 1
 
@@ -96,7 +236,11 @@ class LocalSearchOptimizer(Optimizer):
                 progress.setValue(t)
                 QGuiApplication.processEvents()
 
-            if accept(F[t-1], Bf, t):
+            accepted, threshold = accept(F[t-1], Bf, t)
+
+            T.append(threshold)
+
+            if accepted:
                 A = B
                 F.append(Bf)
             else:
@@ -107,7 +251,7 @@ class LocalSearchOptimizer(Optimizer):
             progress.setValue(max_iter)
             QGuiApplication.processEvents()
 
-        return (A, F)
+        return (A, F, T)
 
     def _in_allowed_area(self, nodes):
         # TODO: implement line intersection check
@@ -115,171 +259,41 @@ class LocalSearchOptimizer(Optimizer):
         return True
 
     def _evaluate(self, genotype):
-        nodes = np.array(
-            [*self.fixed_nodes_pos.flatten(), *grayToStdbin(genotype)]).reshape(-1, 2)
-        supports = self.supports
-        members = self.members_idx
-        loads = self.loads
+        b = self.bridge
+        b.setGenotype(genotype)
+        supports = b.supports
+        nodes = b.nodes
+        members = b.members
+        materials = b.materials
+        loads = b.loads
 
         if not self._in_allowed_area(nodes):
-            return 10e10
+            return 10e6
 
         tmat = np.transpose(nodes[members], axes=(0, 2, 1))
         submat = np.subtract.reduce(tmat, axis=2)
-        member_length = np.hypot.reduce(submat, axis=1, dtype=float)
+        member_length = np.hypot.reduce(
+            submat, axis=1, dtype=float).reshape(-1, 1)
 
-        (detA, MFmat, RFmat) = solve(
-            nodes, members, supports, loads)
+        try:
+            (detA, MFmat, RFmat) = solve(
+                nodes, members, supports, loads)
+        except:
+            return 10e6
 
         if detA == 0:
-            return 10e10
+            return 10e6
 
-        # if np.any(member_length > self.MAX_MEMBER_LENGTH):
-        too_long = member_length[member_length > self.MAX_MEMBER_LENGTH]
-        #    return -np.power(np.log(np.sum(too_long)+1)+1, 2)
-        if self.objFunc == "sum":
+        max_member_lengths = np.array([self.MAX_MEMBER_LENGTHS[
+            int(m)] for m in materials]).reshape(-1, 1)
+
+        too_long = member_length[member_length > max_member_lengths]
+
+        if self.objFunc == ObjectiveFunction.Sum:
             value = np.sum(np.abs(MFmat))
-        else:
+        elif self.objFunc == ObjectiveFunction.Mean:
             value = np.mean(np.abs(MFmat))
-
-        return value + np.power(np.sum(too_long, initial=0), 2)
-
-    def _solve(self, genotype=None):
-        genotype = grayToStdbin(genotype or self.genotype)
-        genotype = np.array(
-            genotype, dtype=int).reshape(-1, 2)
-        nodes = np.vstack([self.fixed_nodes_pos, genotype])
-        supports = self.supports
-        members = self.members_idx
-        loads = self.loads
-        det, MF, RF = solve(nodes, members, supports, loads)
-
-        if det == 0:
-            raise ArithmeticError("Determinant is zero")
-
-        if len(MF) == 0 or len(RF) == 0:
-            raise ArithmeticError("Not solveable")
-
-        return (det, MF, RF)
-
-    def plot(self, figsize=None, title=None, ylim=None, xlim=None, show_loads=False):
-        try:
-            det, MFmat, RFmat = self._solve()
-        except Exception as e:
-            raise ArithmeticError from e
-
-        fitness = self._evaluate(self.genotype)
-
-        genotype = np.array(
-            grayToStdbin(self.genotype), dtype=int).reshape(-1, 2)
-        Nodes = np.vstack([self.fixed_nodes_pos, genotype])
-        Members = self.members_idx
-        Supports = self.supports
-        Loads = self.loads
-
-        tmat = np.transpose(Nodes[Members], axes=(0, 2, 1))
-        submat = np.subtract.reduce(tmat, axis=2)
-        member_lengths = np.hypot.reduce(submat, axis=1, dtype=float)
-
-        plt.figure(figsize=figsize)
-        plt.subplot(2, 1, 1)
-        plt.grid()
-
-        cmap = plt.get_cmap('coolwarm')
-        abs_val = np.abs(MFmat)
-        max_abs = np.max(abs_val)
-        norm = col.Normalize(vmin=-max_abs, vmax=max_abs)
-
-        for i in range(len(Members[:, 0])):
-            force = MFmat[i, 0]
-            plt.plot(Nodes[Members[i, :], 0],
-                     Nodes[Members[i, :], 1], linestyle=(":" if member_lengths[i] > self.MAX_MEMBER_LENGTH else "-"), color=cmap(norm(force)), lw=5)
-            nodes = Nodes[Members[i, :]]
-            center = (np.sum(nodes, axis=0)/2.0).reshape(2, -1)
-
-            if np.abs(force) < 1e-12:
-                c = "k"
-            elif force < 0:
-                c = "blue"
-            else:
-                c = "red"
-
-            plt.text(*center, "{:.1f}".format(force),
-                     backgroundcolor="w", color=c, weight="medium")
-
-        mask = np.ones(Nodes.shape[0], dtype=bool)
-        mask[Supports[:, 0].ravel()] = 0
-        nodes = Nodes[mask].reshape(-1, 2)
-        supports = Nodes[np.invert(mask)].reshape(-1, 2)
-
-        plt.scatter(nodes[:, 0], nodes[:, 1], s=100,
-                    zorder=3, color="w", edgecolors="black")
-        plt.scatter(supports[:, 0], supports[:, 1], s=100, marker="s",
-                    zorder=3, color="w", edgecolors="black")
-        plt.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap))
-
-        if show_loads:
-            for l in Loads:
-                x, y = Nodes[l[0].astype(int)]
-                dx, dy = l[1:]
-                plt.arrow(x, y, dx, dy, head_width=0.2, head_length=0.1,
-                          width=0.1, facecolor="w", edgecolor="black")
-
-        plt.gca().set_aspect('equal', adjustable='box')
-
-        if ylim:
-            plt.ylim(ylim)
-
-        if xlim:
-            plt.xlim(xlim)
-
-        if title:
-            plt.title(title)
         else:
-            plt.title("Fitness: {}".format(fitness))
+            value = np.sqrt(np.mean(MFmat**2))
 
-        ax = plt.subplot(2, 1, 2)
-        ax.set_yscale("log")
-        plt.plot(range(len(self.fitness)), self.fitness)
-        plt.grid()
-        plt.xlabel("Iterations")
-        plt.ylabel("Fitness")
-
-        plt.show()
-
-    @ staticmethod
-    def create_onebit_mutate():
-        def mutate(genotype):
-            assert type(genotype) is bytearray
-            child = bytearray(len(genotype))
-
-            for i, b in enumerate(genotype):
-                child[i] = b
-
-            index = random.randint(0, 8*len(genotype)-1)
-            pos = index % 8
-            child[index//8] ^= 1 << pos
-
-            return child
-        return mutate
-
-    @ staticmethod
-    def create_propbit_mutate():
-        def mutate(genotype):
-            assert type(genotype) is bytearray
-
-            mutrate = 0.125/len(genotype)
-            child = bytearray(len(genotype))
-
-            for i, b in enumerate(genotype):
-                child[i] = b
-                mask = 0
-                for k in range(8):
-                    mask = mask << 1
-                    if random.random() < mutrate:
-                        mask ^= 1
-
-                child[i] ^= mask
-
-            return child
-        return mutate
+        return value + np.sum(np.power(too_long, 2), initial=0)
