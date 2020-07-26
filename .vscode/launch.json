@@ -5,10 +5,19 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: Module",
+            "name": "Run Unittest",
             "type": "python",
             "request": "launch",
             "module": "unittest"
+        },
+        {
+            "name": "Run Evobridge",
+            "type": "python",
+            "request": "launch",
+            "module": "evobridge",
+            "args": [
+                "examples/default.bridge"
+            ]
         }
     ]
 }

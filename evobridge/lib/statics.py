@@ -1,5 +1,6 @@
 # %%
 import numpy as np
+from scipy.linalg import lu
 
 # %%
 
@@ -11,6 +12,11 @@ def solve(nodes, members, supports, loads):
     Ns = nodes.shape[0]
     Ms = members.shape[0]
     Ss = np.sum(supports[:, 1] + supports[:, 2])
+
+    x = (Ms + Ss) - 2 * Ns
+
+    if x != 0:
+        return (x, None, None, None)
 
     Amat = np.zeros((Ms+Ss, Ms+Ss))
     bmat = np.zeros((Ms+Ss, 1))
@@ -31,6 +37,9 @@ def solve(nodes, members, supports, loads):
 
             si = np.hypot(xi-xn, yi-yn)
 
+            if si == 0:  # two or more nodes have same position
+                return (x, 0, None, None)
+
             Amat[2*i, K[l]] = (xi-xn)/si
             Amat[2*i+1, K[l]] = (yi-yn)/si
 
@@ -50,14 +59,25 @@ def solve(nodes, members, supports, loads):
             bmat[2*i, 0] -= loads[l][1]
             bmat[2*i+1, 0] -= loads[l][2]
 
+    if False:
+        p, l, u = lu(Amat)
+        print("Amat", Amat)
+        print(p)
+        print("l", np.all(l == 0, axis=1))
+        print()
+        print("u", np.all(u == 0, axis=1))
+        print()
+
     detA = np.linalg.det(Amat)
 
+    #print("det", detA)
+
     if np.abs(detA) < 1e-12:
-        return (0, None, None)
+        return (x, 0, None, None)
 
-    x = np.linalg.inv(Amat).dot(bmat)
+    X = np.linalg.inv(Amat).dot(bmat)
 
-    MFmat = x[0:Ms]
-    RFmat = x[Ms:]
+    MFmat = X[0:Ms]
+    RFmat = X[Ms:]
 
-    return (detA, MFmat, RFmat)
+    return (x, detA, MFmat, RFmat)

@@ -25,6 +25,6 @@ class AppWidget(QWidget):
         vlayout.addLayout(hlayout)
         vlayout.addWidget(self.tabs)
         vlayout.setStretch(0, 1)
-        vlayout.setContentsMargins(11, 11, 11, 0)
+        vlayout.setContentsMargins(5, 5, 5, 0)
 
         self.prop.onValueChanged.connect(self.drawing.update)

@@ -27,7 +27,8 @@ setup(
     package_data={'': ["*.png"]},
     # data_files=[('', ['evobridge/gui/icons/new-node.png',
     #                  'evobridge/gui/icons/new-rock.png'])],
-    install_requires=["numpy", "PyQt5", "matplotlib"],
+    install_requires=["numpy", "PyQt5",
+                      "matplotlib", "networkx", "scikit-learn"],
     # include_package_data=True,
     entry_points={
         "console_scripts": ['evobridge = evobridge.evobridge:main']

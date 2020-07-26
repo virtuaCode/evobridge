@@ -4,7 +4,7 @@ __version__ = "0.0.3"
 
 
 import sys
-from PyQt5.QtWidgets import QApplication
+from PyQt5.QtWidgets import QApplication, QWidget
 from .gui.MainWindow import MainWindow
 
 

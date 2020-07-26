@@ -11,7 +11,7 @@ from operator import sub
 
 
 class DrawWidget(QFrame):
-    onGridSizeChange = pyqtSignal(int)
+    onGridSizeChange = pyqtSignal(float)
     onCursorChange = pyqtSignal(float, float)
     onObjectChange = pyqtSignal(list)
 
@@ -24,7 +24,7 @@ class DrawWidget(QFrame):
     moved_rest = None
     mouse_moved = False
     left_clicked = False
-    snap = 1
+    snap = 0.25
     min_move_distance = 10
     selected_material = Material.WOOD
 
@@ -40,9 +40,9 @@ class DrawWidget(QFrame):
         self.setMouseTracking(True)
         self.painter = QPainter()
         self.zoom = 0
-        self.gridsize = 10
-        self.every = int(
-            max(1, self.gridsize * int(self.gridsize/self.scale())))
+        self.gridsize = 16
+        self.every = max(0.25, 0.25*int(self.gridsize *
+                                        self.gridsize/self.scale()))
         self.x_offset = 0
         self.y_offset = 0
 
@@ -51,27 +51,27 @@ class DrawWidget(QFrame):
 
         self.onGridSizeChange.emit(self.every)
 
-    @pyqtSlot()
+    @ pyqtSlot()
     def addNewNode(self):
         x, y = self.center()
         self.state.addNode(Node(x, y))
         self.repaint()
 
-    @pyqtSlot()
+    @ pyqtSlot()
     def addNewRock(self):
         x, y = self.center()
         self.state.addRock(Rock(x, y, 40, 40))
         self.repaint()
 
-    @pyqtSlot()
+    @ pyqtSlot()
     def toggleWood(self):
         self.selected_material = Material.WOOD
 
-    @pyqtSlot()
+    @ pyqtSlot()
     def toggleSteel(self):
         self.selected_material = Material.STEEL
 
-    @pyqtSlot()
+    @ pyqtSlot()
     def toggleStreet(self):
         self.selected_material = Material.STREET
 
@@ -81,9 +81,12 @@ class DrawWidget(QFrame):
         self.emitSelectedObjects()
         self.repaint()
 
+    def snapPos(self, x, y):
+        return round(x * 4)/4, round(y * 4)/4
+
     def center(self):
         width, height = self.size().width(), self.size().height()
-        return self.posToWorldPos(width/2, height/2)
+        return self.snapPos(*self.posToWorldPos(width/2, height/2))
 
     def paintEvent(self, event):
 
@@ -91,7 +94,7 @@ class DrawWidget(QFrame):
         p.begin(self)
 
         p.translate(QPointF(self.x_offset, self.y_offset))
-        scale = 2**self.zoom
+        scale = self.scale()
         p.scale(scale, scale)
 
         self.drawGrid(p)
@@ -104,13 +107,13 @@ class DrawWidget(QFrame):
     def wheelEvent(self, event: QWheelEvent):
         if self.zoom_enabled:
             delta = event.angleDelta().y()
-            curscale = 2**self.zoom
+            curscale = self.scale()
 
             mx_before = (event.x() - self.x_offset) / curscale
             my_before = (event.y() - self.y_offset) / curscale
 
             self.zoom += delta / 240
-            scale = 2**self.zoom
+            scale = self.scale()
 
             mx_after = (event.x() - self.x_offset) / scale
             my_after = (event.y() - self.y_offset) / scale
@@ -118,7 +121,8 @@ class DrawWidget(QFrame):
             self.x_offset -= (mx_before - mx_after) * scale
             self.y_offset -= (my_before - my_after) * scale
 
-            self.every = int(max(1, self.gridsize * int(self.gridsize/scale)))
+            self.every = max(
+                1, int(0.25*self.gridsize * self.gridsize/scale))
             self.onGridSizeChange.emit(self.every)
         self.repaint()
 
@@ -131,11 +135,11 @@ class DrawWidget(QFrame):
             self.repaint()
 
     def posToWorldPos(self, x, y):
-        scale = 2**self.zoom
+        scale = self.scale()
         return ((x - self.x_offset) / scale, (y - self.y_offset) / scale)
 
     def worldPosToPos(self, x, y):
-        scale = 2**self.zoom
+        scale = self.scale()
         return (x * scale + self.x_offset, y * scale + self.y_offset)
 
     def mousePressEvent(self, event: QMouseEvent):
@@ -249,17 +253,19 @@ class DrawWidget(QFrame):
 
                 snap = self.snap
 
-                move_x, move_y = (rest_x + nx) // snap, (rest_y + ny) // snap
+                self.moved_rest = (math.fmod(rest_x + nx, snap),
+                                   math.fmod(rest_y + ny, snap))
+
+                move_x, move_y = ((
+                    rest_x + nx - self.moved_rest[0]) / snap, (rest_y + ny - self.moved_rest[1]) / snap)
 
                 for o in self.selectedObjects:
                     o.x += move_x * snap
                     o.y += move_y * snap
 
-                self.moved_rest = ((rest_x + nx) % snap, (rest_y + ny) % snap)
-
                 self.emitSelectedObjects()
                 repaint = True
-            #self.scroll_view = True
+            # self.scroll_view = True
 
         self.prevX = event.x()
         self.prevY = event.y()
@@ -273,8 +279,11 @@ class DrawWidget(QFrame):
     def drawGrid(self, p: QPainter):
         p.save()
 
+        gray = QColor(184, 184, 184)
+        lightgray = QColor(220, 220, 220)
+
         pen = QPen()
-        pen.setColor(QColor(184, 184, 184))
+        pen.setColor(gray)
         pen.setStyle(Qt.DashLine)
         pen.setWidth(1)
         pen.setCosmetic(True)
@@ -284,16 +293,29 @@ class DrawWidget(QFrame):
         p.drawLine(0, 255, 255, 255)
 
         pen.setStyle(Qt.SolidLine)
+        pen.setColor(lightgray)
         p.setPen(pen)
 
-        for x in range(255):
+        for x in range(255*4):
             if x % self.every == 0:
-                p.drawLine(x, 0, x, 255)
-        for y in range(255):
+                p.drawLine(QPointF(x/4, 0), QPointF(x/4, 255))
+
+        for y in range(255*4):
             if y % self.every == 0:
-                p.drawLine(0, y, 255, y)
+                p.drawLine(QPointF(0, y/4), QPointF(255, y/4))
+
+        pen.setColor(gray)
+        p.setPen(pen)
+
+        for x in range(255*4):
+            if x/4 % self.every == 0:
+                p.drawLine(QPointF(x/4, 0), QPointF(x/4, 255))
+
+        for y in range(255*4):
+            if y/4 % self.every == 0:
+                p.drawLine(QPointF(0, y/4), QPointF(255, y/4))
 
         p.restore()
 
     def scale(self):
-        return 2**self.zoom
+        return 4**self.zoom

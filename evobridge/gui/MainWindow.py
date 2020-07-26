@@ -1,15 +1,15 @@
 from .AppWidget import AppWidget
 from PyQt5.QtWidgets import (
-    QAction, QLabel, QMainWindow, QFileDialog, QActionGroup, QProgressBar, QSpacerItem, QAbstractButton, QMessageBox)
+    QAction, QLabel, QMainWindow, QFileDialog, QActionGroup, QProgressBar, QSpacerItem, QAbstractButton, QMessageBox, QSpinBox, QWidget)
 from PyQt5.QtGui import (QIcon, QGuiApplication)
 from PyQt5.QtCore import (Qt, pyqtSlot)
-
+from .TestWidget import TestWidget
 from .State import State
 import os
 import sys
-from ..lib.lsearch import LocalSearchOptimizer
+from ..lib.optimize import LocalSearchOptimizer
 from .Objects import Mutation, ObjectiveFunction
-from ..lib.functions import create_onebit_mutate, create_threshold_accept, create_propbit_mutate
+from ..lib.functions import create_onebit_mutate, create_threshold_accept, create_probbit_mutate
 
 from ..lib.optimize import OptimizerFactory
 
@@ -21,8 +21,7 @@ moduleDir = os.path.dirname(__file__)
 
 class MainWindow(QMainWindow):
     def __init__(self, file=None):
-        QMainWindow.__init__(self)
-
+        super().__init__()
         self.factory = OptimizerFactory()
 
         self.app = AppWidget(self.factory)
@@ -68,15 +67,22 @@ class MainWindow(QMainWindow):
         materialActionGroup.addAction(toggleSteelAction)
         materialActionGroup.setExclusive(True)
 
-        plotAction = QAction(QIcon(), "Plot", self)
-        plotAction.triggered.connect(self.plotBridge)
+        self.plotAction = QAction(QIcon(), "Plot", self)
+        self.plotAction.triggered.connect(self.plotBridge)
 
-        optimizeAction = QAction(QIcon(), "Optimize", self)
-        optimizeAction.triggered.connect(self.optimizeBridge)
+        self.optimizeAction = QAction(QIcon(), "Optimize", self)
+        self.optimizeAction.triggered.connect(self.optimizeBridge)
 
         self.progress = QProgressBar()
         self.progress.setFixedWidth(100)
         self.progress.setEnabled(False)
+
+        self.iterations = QSpinBox()
+        self.iterations.setSingleStep(1)
+        self.iterations.setMinimum(1)
+        self.iterations.setMaximum(10000)
+        self.iterations.setMinimumWidth(90)
+        self.iterations.setValue(300)
 
         toolbar = self.addToolBar("Tools")
         toolbar.addAction(newNodeAction)
@@ -84,10 +90,12 @@ class MainWindow(QMainWindow):
         toolbar.addSeparator()
         toolbar.addActions(materialActionGroup.actions())
         toolbar.addSeparator()
-        toolbar.addAction(plotAction)
-        toolbar.addAction(optimizeAction)
+        toolbar.addAction(self.plotAction)
+        toolbar.addAction(self.optimizeAction)
         toolbar.addWidget(self.progress)
-        # toolbar.addSeparator()
+        toolbar.addSeparator()
+        toolbar.addWidget(QLabel(" Iterations: "))
+        toolbar.addWidget(self.iterations)
 
         mainMenu = self.menuBar()
         fileMenu = mainMenu.addMenu("&File")
@@ -134,7 +142,9 @@ class MainWindow(QMainWindow):
 
         try:
             optimizer = self.factory.createOptimizer(self.app.drawing.state)
-            optimizer.plot(figsize=(12, 7))
+            w = optimizer.plot(self)
+            w.showMaximized()
+
         except BaseException as e:
             traceback.print_exc()
             #print(e.__traceback__, file=sys.stderr)
@@ -149,11 +159,18 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot()
     def optimizeBridge(self):
+        self.optimizeAction.setEnabled(False)
+        self.plotAction.setEnabled(False)
+        self.iterations.setEnabled(False)
+        self.app.tabs.setEnabled(False)
 
         try:
             optimizer = self.factory.createOptimizer(self.app.drawing.state)
-            optimizer.run(progress=self.progress, max_iter=10000)
-            optimizer.plot(figsize=(12, 7), show_fitness_graph=True)
+            optimizer.run(progress=self.progress,
+                          max_iter=int(self.iterations.value()))
+            w = optimizer.plot(self)
+            w.showMaximized()
+
         except BaseException as e:
             traceback.print_exc()
             #print(e.__traceback__, file=sys.stderr)
@@ -165,6 +182,11 @@ class MainWindow(QMainWindow):
             msgBox.setStandardButtons(QMessageBox.Ok)
             msgBox.setDefaultButton(QMessageBox.Ok)
             msgBox.exec()
+        finally:
+            self.optimizeAction.setEnabled(True)
+            self.plotAction.setEnabled(True)
+            self.iterations.setEnabled(True)
+            self.app.tabs.setEnabled(True)
 
     @ pyqtSlot()
     def newFile(self):
@@ -190,9 +212,9 @@ class MainWindow(QMainWindow):
             self.setWindowFilePath(filepath)
             self.update()
 
-    @ pyqtSlot(int)
+    @ pyqtSlot(float)
     def setGridSize(self, val):
-        self.gridSizeLabel.setText("Grid Size: {}".format(val))
+        self.gridSizeLabel.setText("Grid Size: {}".format(max(1, val)*0.25))
         self.update()
 
     @ pyqtSlot(float, float)

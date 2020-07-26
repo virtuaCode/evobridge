@@ -1,12 +1,6 @@
 from .Objects import Node, Rock, Member, Material
 from PyQt5.QtGui import QPainter
 
-max_lengths = [
-    40,  # STREET
-    40,  # WOOD
-    100  # STEEL
-]
-
 
 class State():
 
@@ -87,6 +81,7 @@ class State():
             self.members.append(member)
 
     def removeNode(self, node: Node):
+        # TODO bug when deleting nodes
         assert isinstance(node, Node)
         self.members = [
             member for member in self.members if not member.connectedTo(node)]

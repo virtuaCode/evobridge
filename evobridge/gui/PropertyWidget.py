@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QWidget, QGroupBox, QVBoxLayout, QFormLayout, QHBoxLayout, QSpinBox, QCheckBox
+from PyQt5.QtWidgets import QWidget, QGroupBox, QVBoxLayout, QFormLayout, QHBoxLayout, QDoubleSpinBox, QCheckBox
 from PyQt5.QtCore import pyqtSlot, pyqtSignal, Qt
 
 from .Objects import StateObject, Node, Rock
@@ -16,22 +16,24 @@ class PropertyWidget(QWidget):
 
         rockPropLayout = QFormLayout(self)
 
-        self.xRockSpin = QSpinBox()
+        self.xRockSpin = QDoubleSpinBox()
+        self.xRockSpin.setSingleStep(0.25)
         self.xRockSpin.setMinimum(-1000)
         self.xRockSpin.setMaximum(1000)
         self.xRockSpin.setMinimumWidth(90)
 
-        self.yRockSpin = QSpinBox()
+        self.yRockSpin = QDoubleSpinBox()
+        self.yRockSpin.setSingleStep(0.25)
         self.yRockSpin.setMinimum(-1000)
         self.yRockSpin.setMaximum(1000)
         self.yRockSpin.setMinimumWidth(90)
 
-        self.wRockSpin = QSpinBox()
+        self.wRockSpin = QDoubleSpinBox()
         self.wRockSpin.setMinimum(1)
         self.wRockSpin.setMaximum(255)
         self.wRockSpin.setMinimumWidth(90)
 
-        self.hRockSpin = QSpinBox()
+        self.hRockSpin = QDoubleSpinBox()
         self.hRockSpin.setMinimum(1)
         self.hRockSpin.setMaximum(255)
         self.hRockSpin.setMinimumWidth(90)
@@ -49,12 +51,14 @@ class PropertyWidget(QWidget):
 
         nodePropLayout = QFormLayout(self)
 
-        self.xNodeSpin = QSpinBox()
+        self.xNodeSpin = QDoubleSpinBox()
+        self.xNodeSpin.setSingleStep(0.25)
         self.xNodeSpin.setMinimum(0)
         self.xNodeSpin.setMaximum(255)
         self.xNodeSpin.setMinimumWidth(90)
 
-        self.yNodeSpin = QSpinBox()
+        self.yNodeSpin = QDoubleSpinBox()
+        self.yNodeSpin.setSingleStep(0.25)
         self.yNodeSpin.setMinimum(0)
         self.yNodeSpin.setMaximum(255)
         self.yNodeSpin.setMinimumWidth(90)
@@ -81,22 +85,22 @@ class PropertyWidget(QWidget):
 
         self.setLayout(layout)
 
-    @pyqtSlot(int)
+    @pyqtSlot(float)
     def setXValue(self, val):
         self.activeObject.x = val
         self.onValueChanged.emit()
 
-    @pyqtSlot(int)
+    @pyqtSlot(float)
     def setYValue(self, val):
         self.activeObject.y = val
         self.onValueChanged.emit()
 
-    @pyqtSlot(int)
+    @pyqtSlot(float)
     def setWValue(self, val):
         self.activeObject.w = val
         self.onValueChanged.emit()
 
-    @pyqtSlot(int)
+    @pyqtSlot(float)
     def setHValue(self, val):
         self.activeObject.h = val
         self.onValueChanged.emit()

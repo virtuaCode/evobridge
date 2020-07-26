@@ -6,9 +6,16 @@ import random
 from enum import Enum
 
 MAX_MEMBER_LENGTHS = [
-    40,  # STREET
-    40,  # WOOD
-    100  # STEEL
+    2,  # STREET
+    2,  # WOOD
+    4  # STEEL
+]
+
+# material cost per length unit
+MATERIAL_COSTS = [
+    200,  # STREET
+    180,  # WOOD
+    450  # STEEL
 ]
 
 
@@ -72,10 +79,10 @@ class Rock(StateObject):
         cname, *params = line.split(" ")
         assert cname == cls.__name__
 
-        return cls(*map(int, params))
+        return cls(*map(float, params))
 
     def toString(self):
-        params = map(int, [self.x, self.y, self.w, self.h])
+        params = map(float, [self.x, self.y, self.w, self.h])
         return " ".join(map(str, [self.__class__.__name__, *params]))
 
     def inClickArea(self, x, y):
@@ -107,7 +114,7 @@ class Rock(StateObject):
 
 
 class Node(StateObject):
-    radius = 2
+    radius = 0.25
     h_support = False
     v_support = False
 
@@ -124,10 +131,10 @@ class Node(StateObject):
         cname, *params = line.split(" ")
         assert cname == cls.__name__
 
-        return cls(*map(int, params))
+        return cls(*map(float, params))
 
     def toString(self):
-        return " ".join(map(str, [self.__class__.__name__, int(self.x), int(self.y), int(self.h_support), int(self.v_support)]))
+        return " ".join(map(str, [self.__class__.__name__, float(self.x), float(self.y), int(self.h_support), int(self.v_support)]))
 
     def inClickArea(self, x, y):
         return math.hypot(self.x - x, self.y - y) <= self.radius
@@ -159,10 +166,10 @@ class Node(StateObject):
         else:
             p.drawEllipse(QRectF(self.x-self.radius, self.y -
                                  self.radius, self.radius*2, self.radius*2))
-        p.drawLine(QPointF(self.x - 0.5, self.y),
-                   QPointF(self.x + 0.5, self.y))
-        p.drawLine(QPointF(self.x, self.y - 0.5),
-                   QPointF(self.x, self.y + 0.5))
+        p.drawLine(QPointF(self.x - 0.125, self.y),
+                   QPointF(self.x + 0.125, self.y))
+        p.drawLine(QPointF(self.x, self.y - 0.125),
+                   QPointF(self.x, self.y + 0.125))
         p.restore()
 
     def drawSupport(self, p: QPainter, dir=0):
@@ -222,7 +229,7 @@ class Member():
         pen.setWidthF(4)
         pen.setCosmetic(True)
         p.setPen(pen)
-        p.drawLine(self.a.x, self.a.y, self.b.x, self.b.y)
+        p.drawLine(QPointF(self.a.x, self.a.y), QPointF(self.b.x, self.b.y))
         p.restore()
 
     def connectedTo(self, node):
